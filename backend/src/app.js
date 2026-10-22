@@ -1,15 +1,19 @@
+
 require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const session = require('express-session');
 
-const {
-  clerkMiddleware,
-  getAuth
-} = require('@clerk/express');
-
+const { clerkMiddleware } = require('@clerk/express');
 const prisma = require('./prisma');
+
+const adminRoutes = require('./routes/admin.routes');
+const dishRoutes = require('./routes/dish.routes');
+const categoryRoutes = require('./routes/category.routes');
+const orderRoutes = require('./routes/order.routes');
+const bookingRoutes = require('./routes/booking.routes');
 
 const app = express();
 
@@ -20,124 +24,108 @@ const allowedOrigins = [
   ...(process.env.FRONTEND_URL || '')
     .split(',')
     .map((url) => url.trim())
-    .filter(Boolean)
+    .filter(Boolean),
 ];
 
-const corsOptions = {
-  origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
 
-    if (
-      /^https:\/\/[a-z0-9-]+(?:-[a-z0-9-]+)*\.vercel\.app$/i
-        .test(origin)
-    ) {
-      return callback(null, true);
-    }
+      if (
+        /^https:\/\/[a-z0-9-]+(?:-[a-z0-9-]+)*\.vercel\.app$/i.test(origin)
+      ) {
+        return callback(null, true);
+      }
 
-    return callback(
-      new Error(`CORS: ruxsat berilmagan manba: ${origin}`)
-    );
-  },
-  credentials: true
-};
+      return callback(
+        new Error(`CORS: ruxsat berilmagan manba: ${origin}`)
+      );
+    },
+    credentials: true,
+  })
+);
 
-app.use(cors(corsOptions));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// Backend va database holatini tekshirish uchun ochiq endpoint.
+if (!process.env.ADMIN_SESSION_SECRET) {
+  throw new Error(
+    'ADMIN_SESSION_SECRET backend/.env faylida sozlanmagan'
+  );
+}
+
+app.use(
+  session({
+    name: 'lumiere.admin.sid',
+    secret: process.env.ADMIN_SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 1000 * 60 * 60 * 8,
+    },
+  })
+);
+
 app.get('/health', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
 
-    return res.status(200).json({
+    return res.json({
       success: true,
-      data: {
-        status: 'ok',
-        backend: 'connected',
-        database: 'connected',
-        timestamp: new Date().toISOString()
-      }
+      message: 'Lumiere Restaurant backend ishlayapti',
+      database: 'connected',
     });
-  } catch (err) {
-    console.error(
-      'Health/database check failed:',
-      err.message
-    );
+  } catch (error) {
+    console.error('Database xatosi:', error.message);
 
     return res.status(503).json({
       success: false,
-      data: {
-        status: 'degraded',
-        backend: 'connected',
-        database: 'disconnected',
-        timestamp: new Date().toISOString()
-      },
-      error:
-        'Backend ishlayapti, lekin database bilan aloqa yo‘q. ' +
-        'DATABASE_URL va migratsiyalarni tekshiring.'
+      message: 'Ma’lumotlar bazasiga ulanishda xatolik',
+      database: 'disconnected',
     });
   }
 });
 
-// Clerk autentifikatsiyasi.
 app.use(clerkMiddleware());
 
-app.get('/whoami', (req, res) => {
-  const {
-    userId,
-    sessionId,
-    sessionClaims
-  } = getAuth(req);
+app.use('/api/dishes', dishRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/admin', adminRoutes);
 
-  return res.json({
-    success: true,
-    data: {
-      userId,
-      sessionId,
-      hasClaims: Boolean(sessionClaims)
-    }
-  });
-});
-
-// O‘yinlar uchun API.
-
-// Mavjud bo‘lmagan endpoint.
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    error: 'Endpoint topilmadi'
+    message: 'Bunday API manzili topilmadi',
+    path: req.originalUrl,
   });
 });
 
-// Umumiy xatolarni qaytarish.
-app.use((err, req, res, next) => {
-  console.error(err);
+app.use((error, req, res, next) => {
+  console.error('Server xatosi:', error);
 
   if (res.headersSent) {
-    return next(err);
+    return next(error);
   }
 
-  if (err.name === 'ZodError') {
-    return res.status(400).json({
-      success: false,
-      error: err.issues
-    });
-  }
-
-  if (err.message?.startsWith('CORS:')) {
+  if (error.message?.startsWith('CORS:')) {
     return res.status(403).json({
       success: false,
-      error: err.message
+      message: error.message,
     });
   }
 
-  return res.status(err.status || 500).json({
+  return res.status(error.status || 500).json({
     success: false,
-    error: err.message || 'Serverda kutilmagan xatolik'
+    message: 'Serverda xatolik yuz berdi',
   });
 });
 
