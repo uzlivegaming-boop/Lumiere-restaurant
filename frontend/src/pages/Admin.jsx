@@ -164,7 +164,9 @@ export default function Admin() {
 
         return matchesStatus && matchesSearch;
     });
-
+    const totalSales = orders
+        .filter((order) => order.status === 'COMPLETED')
+        .reduce((sum, order) => sum + Number(order.total || 0), 0);
     const orderStats = [
         {
             title: 'Jami buyurtmalar',
@@ -288,6 +290,12 @@ export default function Admin() {
                             <h2>{stat.count}</h2>
                         </article>
                     ))}
+
+                    <article className="admin-stat-card">
+                        <span className="admin-stat-icon">💰</span>
+                        <p>Jami savdo</p>
+                        <h2>{totalSales.toLocaleString('uz-UZ')} so‘m</h2>
+                    </article>
                 </div>
 
                 {error && (
