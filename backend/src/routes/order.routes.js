@@ -107,7 +107,14 @@ router.post('/', async (req, res) => {
       `📝 Izoh: ${note || 'Yo‘q'}`,
     ].join('\n');
 
-    await sendTelegramMessage(telegramMessage);
+    try {
+      await sendTelegramMessage(telegramMessage);
+    } catch (telegramError) {
+      console.error(
+        'Telegram xabarini yuborishda xatolik:',
+        telegramError.message
+      );
+    }
 
     return res.status(201).json({
       success: true,
