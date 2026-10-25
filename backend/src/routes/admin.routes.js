@@ -173,4 +173,77 @@ router.patch('/orders/:id/status', requireAdmin, async (req, res) => {
   }
 });
 
+
+const allowedBookingStatuses = [
+  'PENDING',
+  'CONFIRMED',
+  'CANCELLED',
+];
+
+// Stol band qilishlar ro‘yxati — faqat admin uchun
+router.get('/bookings', requireAdmin, async (req, res) => {
+  try {
+    const bookings = await prisma.booking.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: bookings,
+    });
+  } catch (error) {
+    console.error('Admin band qilishlar xatosi:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Band qilishlarni olishda xatolik',
+    });
+  }
+});
+
+// Stol band qilish holatini o‘zgartirish — faqat admin uchun
+router.patch('/bookings/:id/status', requireAdmin, async (req, res) => {
+  try {
+    const { status } = req.body;
+
+    if (!allowedBookingStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Band qilish holati noto‘g‘ri',
+      });
+    }
+
+    const booking = await prisma.booking.update({
+      where: {
+        id: req.params.id,
+      },
+      data: {
+        status,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: 'Band qilish holati yangilandi',
+      data: booking,
+    });
+  } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        success: false,
+        message: 'Band qilish topilmadi',
+      });
+    }
+
+    console.error('Band qilish holatini yangilash xatosi:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Band qilish holatini yangilab bo‘lmadi',
+    });
+  }
+});
+
 module.exports = router;

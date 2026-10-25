@@ -2,11 +2,11 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
-
+const { sendTelegramMessage } = require('../utils/telegram');
 // Stol band qilish
 router.post('/', async (req, res) => {
   try {
-    const { name, phone, date, guests, note } = req.body;
+    const { name, phone, date, time, guests, note } = req.body;
 
     if (
       typeof name !== 'string' ||
@@ -14,17 +14,19 @@ router.post('/', async (req, res) => {
       typeof phone !== 'string' ||
       !phone.trim() ||
       !date ||
+      typeof time !== 'string' ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(time) ||
       !Number.isInteger(guests) ||
       guests < 1 ||
       guests > 50
     ) {
       return res.status(400).json({
         success: false,
-        message: 'Ism, telefon, sana va mehmonlar sonini to‘g‘ri kiriting',
+        message: 'Ism, telefon, sana, vaqt va mehmonlar sonini to‘g‘ri kiriting',
       });
     }
 
-    const bookingDate = new Date(date);
+    const bookingDate = new Date(`${date}T${time}:00`);
 
     if (
       Number.isNaN(bookingDate.getTime()) ||
@@ -32,7 +34,7 @@ router.post('/', async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: 'Kelajakdagi to‘g‘ri sanani tanlang',
+        message: 'Kelajakdagi sana va vaqtni tanlang',
       });
     }
 
@@ -41,18 +43,35 @@ router.post('/', async (req, res) => {
         name: name.trim(),
         phone: phone.trim(),
         date: bookingDate,
+        time,
         guests,
         note: typeof note === 'string' ? note.trim() || null : null,
       },
       select: {
         id: true,
         name: true,
+        phone: true,
         date: true,
+        time: true,
         guests: true,
+        note: true,
         status: true,
         createdAt: true,
       },
     });
+
+    await sendTelegramMessage(
+      `🍽️ YANGI STOL BAND QILISH
+
+👤 Ism: ${booking.name}
+📞 Telefon: ${booking.phone}
+📅 Sana: ${booking.date.toLocaleDateString('uz-UZ')}
+🕒 Vaqt: ${booking.time}
+👥 Mehmonlar: ${booking.guests}
+📝 Izoh: ${booking.note || 'Yo‘q'}
+
+📌 Holat: ${booking.status}`
+    );
 
     return res.status(201).json({
       success: true,

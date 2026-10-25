@@ -29,3 +29,19 @@ export async function updateOrderStatus(id, status) {
 
   return response.data;
 }
+
+// Stol band qilishlar ro‘yxatini olish
+export async function getAdminBookings() {
+  const response = await client.get('/api/admin/bookings');
+  return response.data;
+}
+
+// Stol band qilish holatini o‘zgartirish
+export async function updateBookingStatus(id, status) {
+  const response = await client.patch(
+    `/api/admin/bookings/${id}/status`,
+    { status }
+  );
+
+  return response.data;
+}

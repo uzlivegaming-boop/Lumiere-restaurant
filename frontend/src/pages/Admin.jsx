@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
+
 import {
     adminLogin,
     adminLogout,
     getAdminOrders,
     getAdminStatus,
     updateOrderStatus,
+    getAdminBookings,
+    updateBookingStatus,
 } from '../api/admin';
+
 
 export default function Admin() {
     const [password, setPassword] = useState('');
@@ -18,6 +22,45 @@ export default function Admin() {
     const [updatingOrderId, setUpdatingOrderId] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const knownOrderIds = useRef(null);
+
+
+
+    const [updatingBookingId, setUpdatingBookingId] = useState(null);
+
+    const {
+        data: bookings = [],
+        isLoading: bookingsLoading,
+        refetch: loadBookings,
+    } = useQuery({
+        queryKey: ['adminBookings'],
+        queryFn: async () => {
+            const result = await getAdminBookings();
+            return result.data || [];
+        },
+        enabled: isAdmin,
+        refetchInterval: isAdmin ? 15000 : false,
+        retry: false,
+    });
+
+    async function handleBookingStatusChange(bookingId, status) {
+        setError('');
+        setUpdatingBookingId(bookingId);
+
+        try {
+            await updateBookingStatus(bookingId, status);
+            await loadBookings();
+        } catch (err) {
+            setError(
+                err.response?.data?.message ||
+                'Band qilish holatini o‘zgartirib bo‘lmadi.'
+            );
+        } finally {
+            setUpdatingBookingId(null);
+        }
+    }
+
+
+
 
     const {
         data: orders = [],
@@ -389,6 +432,69 @@ export default function Admin() {
                         ))}
                     </div>
                 )}
+
+                <div className="admin-bookings-section">
+                    <h2>Stol band qilishlar</h2>
+                    <p>Jami band qilishlar: {bookings.length}</p>
+
+                    <button
+                        type="button"
+                        onClick={() => loadBookings()}
+                        disabled={bookingsLoading}
+                    >
+                        {bookingsLoading ? 'Yuklanmoqda...' : 'Band qilishlarni yangilash'}
+                    </button>
+
+                    {bookingsLoading ? (
+                        <p>Band qilishlar yuklanmoqda...</p>
+                    ) : bookings.length === 0 ? (
+                        <p>Hozircha stol band qilishlar yo‘q.</p>
+                    ) : (
+                        <div className="admin-orders">
+                            {bookings.map((booking) => (
+                                <article className="admin-order" key={booking.id}>
+                                    <h3>{booking.name}</h3>
+                                    <p>Telefon: {booking.phone}</p>
+                                    <p>
+                                        Sana: {new Date(booking.date).toLocaleDateString('uz-UZ')}
+                                    </p>
+                                    <p>Vaqt: {booking.time}</p>
+                                    <p>Mehmonlar: {booking.guests} kishi</p>
+                                    {booking.note && <p>Izoh: {booking.note}</p>}
+                                    <p>
+                                        Yaratilgan vaqt:{' '}
+                                        {new Date(booking.createdAt).toLocaleString('uz-UZ')}
+                                    </p>
+
+                                    <label htmlFor={`booking-status-${booking.id}`}>
+                                        Band qilish holati
+                                    </label>
+
+                                    <select
+                                        id={`booking-status-${booking.id}`}
+                                        value={booking.status}
+                                        disabled={updatingBookingId === booking.id}
+                                        onChange={(event) =>
+                                            handleBookingStatusChange(
+                                                booking.id,
+                                                event.target.value
+                                            )
+                                        }
+                                    >
+                                        <option value="PENDING">Kutilmoqda</option>
+                                        <option value="CONFIRMED">Tasdiqlandi</option>
+                                        <option value="CANCELLED">Bekor qilindi</option>
+                                    </select>
+
+                                    {updatingBookingId === booking.id && (
+                                        <p>Holat yangilanmoqda...</p>
+                                    )}
+                                </article>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
             </section>
         </main>
     );

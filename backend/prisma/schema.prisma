@@ -136,6 +136,7 @@ model Booking {
   name      String
   phone     String
   date      DateTime
+  time      String        @default("19:00")
   guests    Int
   note      String?       @db.Text
   status    BookingStatus @default(PENDING)

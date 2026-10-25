@@ -14,6 +14,7 @@ const dishRoutes = require('./routes/dish.routes');
 const categoryRoutes = require('./routes/category.routes');
 const orderRoutes = require('./routes/order.routes');
 const bookingRoutes = require('./routes/booking.routes');
+const { errorHandler, notFound } = require('./middlewares/errorHandler');
 
 const app = express();
 
@@ -101,32 +102,9 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/admin', adminRoutes);
 
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Bunday API manzili topilmadi',
-    path: req.originalUrl,
-  });
-});
 
-app.use((error, req, res, next) => {
-  console.error('Server xatosi:', error);
+app.use(notFound)
+app.use((err, req, res, next) => errorHandler(err, req, res, next))
 
-  if (res.headersSent) {
-    return next(error);
-  }
-
-  if (error.message?.startsWith('CORS:')) {
-    return res.status(403).json({
-      success: false,
-      message: error.message,
-    });
-  }
-
-  return res.status(error.status || 500).json({
-    success: false,
-    message: 'Serverda xatolik yuz berdi',
-  });
-});
 
 module.exports = app;
