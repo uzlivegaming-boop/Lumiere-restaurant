@@ -1,8 +1,14 @@
 
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const prisma = require('../prisma');
-const { sendTelegramMessage } = require('../utils/telegram');
+
+const {
+  sendTelegramMessage,
+  statusButtons,
+  getTelegramLink,
+} = require('../utils/telegram');
 
 // Yangi buyurtma yaratish
 router.post('/', async (req, res) => {
@@ -21,7 +27,6 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Taomlar bazada mavjudligini va narxlarini tekshirish
     const dishIds = [...new Set(items.map((item) => item.dishId))];
 
     if (
@@ -69,6 +74,9 @@ router.post('/', async (req, res) => {
       0
     );
 
+    // Har bir buyurtma uchun taxmin qilish qiyin bo‘lgan token
+    const telegramLinkToken = crypto.randomBytes(24).toString('hex');
+
     const order = await prisma.order.create({
       data: {
         customerName: customerName.trim(),
@@ -76,6 +84,7 @@ router.post('/', async (req, res) => {
         address: address?.trim() || null,
         note: note?.trim() || null,
         total: total.toFixed(2),
+        telegramLinkToken,
         items: {
           create: orderItems,
         },
@@ -100,7 +109,9 @@ router.post('/', async (req, res) => {
       '🛒 Taomlar:',
       ...orderItems.map((item) => {
         const dish = dishMap.get(item.dishId);
-        return `• ${dish.name} × ${item.quantity} — ${(Number(item.unitPrice) * item.quantity).toLocaleString('uz-UZ')} so‘m`;
+        return `• ${dish.name} × ${item.quantity} — ${
+          (Number(item.unitPrice) * item.quantity).toLocaleString('uz-UZ')
+        } so‘m`;
       }),
       '',
       `💰 Jami: ${total.toLocaleString('uz-UZ')} so‘m`,
@@ -108,7 +119,10 @@ router.post('/', async (req, res) => {
     ].join('\n');
 
     try {
-      await sendTelegramMessage(telegramMessage);
+      await sendTelegramMessage(
+        telegramMessage,
+        statusButtons('order', order.id)
+      );
     } catch (telegramError) {
       console.error(
         'Telegram xabarini yuborishda xatolik:',
@@ -116,10 +130,15 @@ router.post('/', async (req, res) => {
       );
     }
 
+    const telegramLink = getTelegramLink(telegramLinkToken);
+
     return res.status(201).json({
       success: true,
       message: 'Buyurtmangiz qabul qilindi',
-      data: order,
+      data: {
+        ...order,
+        telegramLink,
+      },
     });
   } catch (error) {
     console.error('Buyurtma yaratish xatosi:', error);

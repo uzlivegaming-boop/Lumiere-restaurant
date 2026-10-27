@@ -97,15 +97,17 @@ model Rating {
 }
 
 model Order {
-  id           String      @id @default(cuid())
-  status       OrderStatus @default(PENDING)
-  total        Decimal     @db.Decimal(10, 2)
-  customerName String
-  phone        String
-  address      String?
-  note         String?     @db.Text
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id                     String      @id @default(cuid())
+  status                 OrderStatus @default(PENDING)
+  total                  Decimal     @db.Decimal(10, 2)
+  customerName           String
+  phone                  String
+  customerTelegramChatId String?
+  telegramLinkToken      String?     @unique
+  address                String?
+  note                   String?     @db.Text
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
 
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -132,15 +134,17 @@ model OrderItem {
 }
 
 model Booking {
-  id        String        @id @default(cuid())
-  name      String
-  phone     String
-  date      DateTime
-  time      String        @default("19:00")
-  guests    Int
-  note      String?       @db.Text
-  status    BookingStatus @default(PENDING)
-  createdAt DateTime      @default(now())
+  id                     String        @id @default(cuid())
+  name                   String
+  phone                  String
+  customerTelegramChatId String?
+  telegramLinkToken      String?       @unique
+  date                   DateTime
+  time                   String        @default("19:00")
+  guests                 Int
+  note                   String?       @db.Text
+  status                 BookingStatus @default(PENDING)
+  createdAt              DateTime      @default(now())
 
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)

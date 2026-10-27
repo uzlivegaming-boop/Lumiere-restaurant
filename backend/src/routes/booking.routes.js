@@ -2,7 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
-const { sendTelegramMessage } = require('../utils/telegram');
+const {
+  sendTelegramMessage,
+  statusButtons,
+} = require('../utils/telegram');
 // Stol band qilish
 router.post('/', async (req, res) => {
   try {
@@ -63,6 +66,7 @@ router.post('/', async (req, res) => {
     await sendTelegramMessage(
       `🍽️ YANGI STOL BAND QILISH
 
+🆔 Bron: #${booking.id}
 👤 Ism: ${booking.name}
 📞 Telefon: ${booking.phone}
 📅 Sana: ${booking.date.toLocaleDateString('uz-UZ')}
@@ -70,7 +74,8 @@ router.post('/', async (req, res) => {
 👥 Mehmonlar: ${booking.guests}
 📝 Izoh: ${booking.note || 'Yo‘q'}
 
-📌 Holat: ${booking.status}`
+📌 Holat: ${booking.status}`,
+      statusButtons('booking', booking.id)
     );
 
     return res.status(201).json({
