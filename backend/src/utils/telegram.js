@@ -309,6 +309,7 @@ async function handleCallback(callback) {
 }
 
 // Telegram xabarlarini tinglash
+
 async function startTelegramPolling() {
   if (pollingStarted) return;
 
@@ -346,18 +347,30 @@ async function startTelegramPolling() {
               await handleStartMessage(update.message);
             }
           } catch (error) {
-            console.error('Telegram update xatosi:', error.message);
+            console.error(
+              'Telegram update xatosi:',
+              error.message
+            );
           }
         }
       } catch (error) {
-        console.error('Telegram polling xatosi:', error.message);
+        console.error(
+          'Telegram polling xatosi:',
+          error.message,
+          error.cause?.message || ''
+        );
 
         await new Promise((resolve) => setTimeout(resolve, 3000));
       }
     }
   } catch (error) {
     pollingStarted = false;
-    console.error('Telegram polling ishga tushmadi:', error.message);
+
+    console.error('Telegram polling ishga tushmadi:', {
+      message: error.message,
+      cause: error.cause?.message,
+      code: error.cause?.code,
+    });
   }
 }
 

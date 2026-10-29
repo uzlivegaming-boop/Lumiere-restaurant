@@ -2237,6 +2237,396 @@ footer {
 
 
 
+/* ===== LUMIERE ADMIN — TAOMLARNI BOSHQARISH ===== */
+
+.admin-page {
+  min-height: 100vh;
+  padding: 36px 24px 60px;
+  background: #0b0b0b;
+  color: #f5f0e8;
+}
+
+.admin-page h1,
+.admin-page h2,
+.admin-page h3 {
+  color: #f5f0e8;
+}
+
+.admin-page h2 {
+  margin: 28px 0 22px;
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.admin-page button,
+.admin-page input,
+.admin-page select,
+.admin-page textarea {
+  font: inherit;
+}
+
+.admin-page button {
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+/* Taom qo‘shish formasi */
+
+.admin-dish-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  padding: 28px;
+  background: #141414;
+  border: 1px solid #302719;
+  border-radius: 18px;
+  box-shadow: 0 12px 35px rgb(0 0 0 / 20%);
+}
+
+.admin-dish-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  color: #d8c9a7;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.admin-dish-form input,
+.admin-dish-form select,
+.admin-dish-form textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 13px 14px;
+  color: #f5f0e8;
+  background: #0c0c0c;
+  border: 1px solid #393329;
+  border-radius: 9px;
+  outline: none;
+}
+
+.admin-dish-form input:focus,
+.admin-dish-form select:focus,
+.admin-dish-form textarea:focus {
+  border-color: #c9a45c;
+  box-shadow: 0 0 0 3px rgb(201 164 92 / 12%);
+}
+
+.admin-dish-form input::placeholder,
+.admin-dish-form textarea::placeholder {
+  color: #77716a;
+}
+
+.admin-dish-form select option {
+  color: #f5f0e8;
+  background: #141414;
+}
+
+.admin-dish-form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.admin-dish-form input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #c9a45c;
+}
+
+.admin-dish-form label:has(input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-dish-form > button,
+.admin-dish-form button[type="submit"] {
+  grid-column: 1 / -1;
+  min-height: 48px;
+  padding: 13px 20px;
+  color: #111;
+  background: #c9a45c;
+  border: 1px solid #c9a45c;
+  border-radius: 9px;
+  font-weight: 700;
+}
+
+.admin-dish-form > button:hover,
+.admin-dish-form button[type="submit"]:hover {
+  background: #e0bd78;
+  border-color: #e0bd78;
+}
+
+/* Taomlar ro‘yxati */
+
+.admin-dishes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.admin-dish-card {
+  min-width: 0;
+  overflow: hidden;
+  background: #141414;
+  border: 1px solid #302719;
+  border-radius: 16px;
+  transition:
+    transform 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.admin-dish-card:hover {
+  transform: translateY(-4px);
+  border-color: #8d703c;
+  box-shadow: 0 14px 32px rgb(0 0 0 / 25%);
+}
+
+.admin-dish-card img {
+  display: block;
+  width: 100%;
+  height: 210px;
+  object-fit: cover;
+  background: #202020;
+}
+
+.admin-dish-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+}
+
+.admin-dish-card h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.admin-dish-card p {
+  margin: 0;
+  color: #b9b2a7;
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.admin-dish-card .admin-dish-price {
+  color: #d8b56c;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.admin-dish-status {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  color: #bce7c4;
+  background: rgb(47 125 65 / 14%);
+  border: 1px solid rgb(87 170 103 / 30%);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-dish-status.unavailable {
+  color: #f0b4ad;
+  background: rgb(170 55 45 / 12%);
+  border-color: rgb(190 78 65 / 30%);
+}
+
+/* Taom kartochkasi tugmalari */
+
+.admin-dish-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 5px;
+}
+
+.admin-dish-actions button {
+  flex: 1 1 100px;
+  min-height: 39px;
+  padding: 9px 12px;
+  color: #eee6d8;
+  background: #22201c;
+  border: 1px solid #40382b;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-dish-actions button:hover {
+  color: #111;
+  background: #c9a45c;
+  border-color: #c9a45c;
+}
+
+.admin-dish-actions .delete-button {
+  color: #f1a59c;
+  border-color: #59302b;
+}
+
+.admin-dish-actions .delete-button:hover {
+  color: white;
+  background: #a83228;
+  border-color: #a83228;
+}
+
+/* Bo‘sh ro‘yxat yoki xabarlar */
+
+.admin-dishes-empty {
+  padding: 35px 20px;
+  color: #b9b2a7;
+  text-align: center;
+  background: #141414;
+  border: 1px dashed #40382b;
+  border-radius: 14px;
+}
+
+
+
+/* Admin bo'limlari tablari */
+.admin-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 24px 0;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.admin-tabs .admin-tab {
+    padding: 12px 22px;
+    border: 1px solid #3d3522;
+    border-radius: 10px;
+    background: #171717;
+    color: #d4d4d4;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.25s ease;
+}
+
+.admin-tabs .admin-tab:hover {
+    border-color: #d4af37;
+    color: #f5d76e;
+}
+
+.admin-tabs .admin-tab.active {
+    background: linear-gradient(135deg, #d4af37, #a77b16);
+    border-color: #d4af37;
+    color: #17130a;
+    box-shadow: 0 4px 14px rgba(212, 175, 55, 0.18);
+}
+
+/* Taom kartasidagi tugmalar */
+.admin-dish-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.admin-dish-actions button {
+    padding: 10px 14px;
+    border: 1px solid #b18b2b;
+    border-radius: 8px;
+    background: #242018;
+    color: #f4d675;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.admin-dish-actions button:hover:not(:disabled) {
+    background: #3b3018;
+    transform: translateY(-2px);
+}
+
+.admin-dish-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* O'chirish tugmasi */
+.admin-dish-actions button:last-child {
+    border-color: #8b3535;
+    background: #321c1c;
+    color: #ffaaaa;
+}
+
+.admin-dish-actions button:last-child:hover:not(:disabled) {
+    background: #572323;
+    border-color: #e05a5a;
+}
+
+
+
+
+.admin-dish-actions button:first-child {
+    background: #243b53;
+    color: #bfdbfe;
+    border: 1px solid #3b82f6;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.admin-dish-actions button:first-child:hover {
+    background: #1d4ed8;
+    color: white;
+}
+
+.admin-dish-actions button:nth-child(2) {
+    background: #3b2f16;
+    color: #fcd34d;
+    border: 1px solid #d4a72c;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.admin-dish-actions button:nth-child(2):hover {
+    background: #705315;
+    color: white;
+}
+
+.admin-dish-actions button:last-child {
+    background: #451f24;
+    color: #fca5a5;
+    border: 1px solid #ef4444;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.admin-dish-actions button:last-child:hover:not(:disabled) {
+    background: #b91c1c;
+    color: white;
+}
+
+
+/* Planshet */
+
+@media (max-width: 1050px) {
+  .admin-dishes-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+
 
 @media (max-width: 1000px) {
   .home-benefits {
@@ -2478,6 +2868,51 @@ footer {
   }
 }
 
+/* Telefon */
+
+@media (max-width: 640px) {
+  .admin-page {
+    padding: 22px 14px 40px;
+  }
+
+  .admin-page h2 {
+    font-size: 22px;
+  }
+
+  .admin-dish-form {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .admin-dish-form > button,
+  .admin-dish-form button[type="submit"] {
+    grid-column: auto;
+  }
+
+  .admin-dishes-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .admin-dish-card img {
+    height: 220px;
+  }
+
+  .admin-dish-card-content {
+    padding: 16px;
+  }
+
+  .admin-dish-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-dish-actions button {
+    width: 100%;
+  }
+}
+
 
 
 
@@ -2572,6 +3007,18 @@ footer {
 
     .admin-bookings-section > button {
         width: 100%;
+    }
+
+        .admin-tabs {
+        flex-direction: column;
+    }
+
+    .admin-tabs .admin-tab {
+        width: 100%;
+    }
+
+    .admin-dish-actions button {
+        flex: 1 1 auto;
     }
 
 }
