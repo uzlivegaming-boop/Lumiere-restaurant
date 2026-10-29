@@ -5,8 +5,8 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const session = require('express-session');
-
 const { clerkMiddleware } = require('@clerk/express');
+
 const prisma = require('./prisma');
 
 const adminRoutes = require('./routes/admin.routes');
@@ -14,10 +14,15 @@ const dishRoutes = require('./routes/dish.routes');
 const categoryRoutes = require('./routes/category.routes');
 const orderRoutes = require('./routes/order.routes');
 const bookingRoutes = require('./routes/booking.routes');
-const { errorHandler, notFound } = require('./middlewares/errorHandler');
+const contactRoutes = require('./routes/contact.routes');
+const {
+  errorHandler,
+  notFound,
+} = require('./middlewares/errorHandler');
 
 const app = express();
 
+// Ruxsat berilgan frontend manzillari
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
@@ -28,6 +33,7 @@ const allowedOrigins = [
     .filter(Boolean),
 ];
 
+// CORS sozlamalari
 app.use(
   cors({
     origin(origin, callback) {
@@ -35,8 +41,11 @@ app.use(
         return callback(null, true);
       }
 
+      // Vercel domenlarini tekshirish
       if (
-        /^https:\/\/[a-z0-9-]+(?:-[a-z0-9-]+)*\.vercel\.app$/i.test(origin)
+        /^https:\/\/[a-z0-9-]+(?:-[a-z0-9-]+)*\.vercel\.app$/i.test(
+          origin
+        )
       ) {
         return callback(null, true);
       }
@@ -49,16 +58,18 @@ app.use(
   })
 );
 
+// Umumiy middleware'lar
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
-
+// Admin sessiyasi uchun maxfiy kalit
 if (!process.env.ADMIN_SESSION_SECRET) {
   throw new Error(
     'ADMIN_SESSION_SECRET backend/.env faylida sozlanmagan'
   );
 }
 
+// Admin sessiyasi
 app.use(
   session({
     name: 'lumiere.admin.sid',
@@ -74,17 +85,20 @@ app.use(
   })
 );
 
+// Server va ma'lumotlar bazasini tekshirish
+
 app.get('/health', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       message: 'Lumiere Restaurant backend ishlayapti',
       database: 'connected',
     });
   } catch (error) {
-    console.error('Database xatosi:', error.message);
+    console.error('Database xatosining to‘liq tafsiloti:');
+    console.error(error);
 
     return res.status(503).json({
       success: false,
@@ -94,17 +108,22 @@ app.get('/health', async (req, res) => {
   }
 });
 
+
+// Clerk autentifikatsiyasi
 app.use(clerkMiddleware());
 
+// API route'lari
 app.use('/api/dishes', dishRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/contact', contactRoutes);
 
+// Topilmagan route
+app.use(notFound);
 
-app.use(notFound)
-app.use((err, req, res, next) => errorHandler(err, req, res, next))
-
+// Umumiy xatolarni qayta ishlash
+app.use(errorHandler);
 
 module.exports = app;

@@ -1,56 +1,22 @@
 
 const express = require('express');
 const router = express.Router();
-const prisma = require('../prisma');
 
-// Barcha taomlarni olish
-router.get('/', async (req, res) => {
-  try {
-    const dishes = await prisma.dish.findMany({
-      include: {
-        category: true,
-        ratings: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+const requireAdmin = require('../middlewares/adminAuth');
 
-    res.status(200).json(dishes);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: 'Taomlarni olishda xatolik yuz berdi',
-    });
-  }
-});
+const {
+  getAllDishes,
+  getOneDish,
+  createDish,
+  updateDish,
+  removeDish,
+} = require('../controllers/dishes.controller');
 
-// ID orqali bitta taomni olish
-router.get('/:id', async (req, res) => {
-  try {
-    const dish = await prisma.dish.findUnique({
-      where: {
-        id: req.params.id,
-      },
-      include: {
-        category: true,
-        ratings: true,
-      },
-    });
+router.get('/', getAllDishes);
+router.get('/:id', getOneDish);
 
-    if (!dish) {
-      return res.status(404).json({
-        message: 'Taom topilmadi',
-      });
-    }
-
-    res.status(200).json(dish);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: 'Taomni olishda xatolik yuz berdi',
-    });
-  }
-});
+router.post('/', requireAdmin, createDish);
+router.put('/:id', requireAdmin, updateDish);
+router.delete('/:id', requireAdmin, removeDish);
 
 module.exports = router;

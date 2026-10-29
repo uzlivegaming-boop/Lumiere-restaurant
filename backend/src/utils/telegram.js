@@ -1,8 +1,8 @@
 
 require('dotenv').config();
 
-const crypto = require('crypto');
 const prisma = require('../prisma');
+const crypto = require('crypto');
 
 const API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 
@@ -14,6 +14,7 @@ async function telegramRequest(method, body = {}) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
   });
 
   const result = await response.json();
@@ -25,7 +26,7 @@ async function telegramRequest(method, body = {}) {
   return result.result;
 }
 
-// Adminning Telegram guruhiga xabar yuborish
+// Adminning Telegram chatiga xabar yuborish
 async function sendTelegramMessage(message, replyMarkup) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
@@ -49,7 +50,7 @@ async function sendTelegramMessage(message, replyMarkup) {
   }
 }
 
-// Mijozning shaxsiy Telegram akkauntiga xabar
+// Telegram chat ID ma'lum bo‘lgan mijozga xabar yuborish
 async function sendCustomerTelegramMessage(chatId, message) {
   if (!chatId) return false;
 
@@ -66,7 +67,6 @@ async function sendCustomerTelegramMessage(chatId, message) {
   }
 }
 
-// Buyurtma yoki bron uchun bir martalik ulanish tokeni
 function createTelegramLinkToken() {
   return crypto.randomBytes(24).toString('hex');
 }
@@ -96,19 +96,23 @@ function statusButtons(type, id) {
   };
 }
 
-// Mijoz botdagi Start havolasini ochganda akkauntni bog‘lash
+// Mijozning Telegram akkauntini buyurtma yoki bron bilan ulash
 async function handleStartMessage(message) {
   const text = message.text || '';
-  const match = text.match(/^\/start(?:@\w+)?\s+([a-f0-9]{48})$/i);
   const chatId = message.chat?.id;
 
-  if (!match || !chatId || message.chat?.type !== 'private') {
-    if (message.chat?.type === 'private' && /^\/start(?:@\w+)?$/.test(text)) {
+  if (!chatId || message.chat?.type !== 'private') return;
+
+  const match = text.match(/^\/start(?:@\w+)?\s+([a-f0-9]{48})$/i);
+
+  if (!match) {
+    if (/^\/start(?:@\w+)?$/.test(text)) {
       await telegramRequest('sendMessage', {
         chat_id: chatId,
-        text: 'Assalomu alaykum! Buyurtmani ulash uchun saytdagi Telegram ulanish havolasidan foydalaning.',
+        text: 'Assalomu alaykum! Buyurtma yoki bronni ulash uchun saytdagi Telegram havolasidan foydalaning.',
       });
     }
+
     return;
   }
 
@@ -130,8 +134,9 @@ async function handleStartMessage(message) {
 
       await telegramRequest('sendMessage', {
         chat_id: chatId,
-        text: `✅ Telegram akkauntingiz ${order.id} raqamli buyurtmaga ulandi. Buyurtma holati o‘zgarsa, sizga xabar yuboramiz.`,
+        text: `✅ Telegram akkauntingiz ${order.id} raqamli buyurtmaga ulandi. Holat o‘zgarsa, sizga xabar yuboramiz.`,
       });
+
       return;
     }
 
@@ -152,18 +157,20 @@ async function handleStartMessage(message) {
         chat_id: chatId,
         text: '✅ Telegram akkauntingiz stol broniga ulandi. Bron holati o‘zgarsa, sizga xabar yuboramiz.',
       });
+
       return;
     }
 
     await telegramRequest('sendMessage', {
       chat_id: chatId,
-      text: 'Bu ulanish havolasi yaroqsiz yoki avval ishlatilgan. Iltimos, saytdan yangi havola oling.',
+      text: 'Bu ulanish havolasi yaroqsiz yoki avval ishlatilgan. Saytdan yangi havola oling.',
     });
   } catch (error) {
     console.error('Telegram akkauntini ulash xatosi:', error.message);
   }
 }
 
+// Buyurtma yoki bron holati o‘zgarganda mijozga xabar yuborish
 async function notifyCustomerStatus(type, record) {
   if (!record?.customerTelegramChatId) return false;
 
@@ -176,14 +183,20 @@ async function notifyCustomerStatus(type, record) {
     PENDING: '⏳ Kutilmoqda',
   };
 
+  const status = statusText[record.status] || record.status;
+
   const message =
     type === 'order'
-      ? `LUMIERE RESTAURANT\n\nBuyurtmangiz holati yangilandi.\nBuyurtma: ${record.id}\nHolati: ${statusText[record.status] || record.status}`
-      : `LUMIERE RESTAURANT\n\nStol broningiz holati yangilandi.\nBron: ${record.id}\nHolati: ${statusText[record.status] || record.status}`;
+      ? `LUMIERE RESTAURANT\n\nBuyurtmangiz holati yangilandi.\nBuyurtma: ${record.id}\nHolati: ${status}`
+      : `LUMIERE RESTAURANT\n\nStol broningiz holati yangilandi.\nBron: ${record.id}\nHolati: ${status}`;
 
-  return sendCustomerTelegramMessage(record.customerTelegramChatId, message);
+  return sendCustomerTelegramMessage(
+    record.customerTelegramChatId,
+    message
+  );
 }
 
+// Adminning Telegram tugmalarini boshqarish
 async function handleCallback(callback) {
   const adminId = process.env.TELEGRAM_ADMIN_ID;
   const targetChatId = process.env.TELEGRAM_CHAT_ID;
@@ -198,11 +211,14 @@ async function handleCallback(callback) {
       text: 'Bu tugmalardan foydalanishga ruxsatingiz yo‘q.',
       show_alert: true,
     });
+
     return;
   }
 
   const data = callback.data || '';
-  const match = data.match(/^(order|booking):(CONFIRMED|CANCELLED):([a-zA-Z0-9_-]+)$/);
+  const match = data.match(
+    /^(order|booking):(CONFIRMED|CANCELLED):([a-zA-Z0-9_-]+)$/
+  );
 
   if (!match) {
     await telegramRequest('answerCallbackQuery', {
@@ -210,6 +226,7 @@ async function handleCallback(callback) {
       text: 'Noto‘g‘ri buyruq.',
       show_alert: true,
     });
+
     return;
   }
 
@@ -219,16 +236,19 @@ async function handleCallback(callback) {
     let record;
 
     if (type === 'order') {
-      const order = await prisma.order.findUnique({ where: { id } });
+      const existing = await prisma.order.findUnique({
+        where: { id },
+      });
 
-      if (!order) throw new Error('Buyurtma topilmadi');
+      if (!existing) throw new Error('Buyurtma topilmadi');
 
-      if (order.status !== 'PENDING') {
+      if (existing.status !== 'PENDING') {
         await telegramRequest('answerCallbackQuery', {
           callback_query_id: callback.id,
-          text: `Bu buyurtma allaqachon ${order.status} holatida.`,
+          text: `Bu buyurtma allaqachon ${existing.status} holatida.`,
           show_alert: true,
         });
+
         return;
       }
 
@@ -237,16 +257,19 @@ async function handleCallback(callback) {
         data: { status },
       });
     } else {
-      const booking = await prisma.booking.findUnique({ where: { id } });
+      const existing = await prisma.booking.findUnique({
+        where: { id },
+      });
 
-      if (!booking) throw new Error('Bron topilmadi');
+      if (!existing) throw new Error('Bron topilmadi');
 
-      if (booking.status !== 'PENDING') {
+      if (existing.status !== 'PENDING') {
         await telegramRequest('answerCallbackQuery', {
           callback_query_id: callback.id,
-          text: `Bu bron allaqachon ${booking.status} holatida.`,
+          text: `Bu bron allaqachon ${existing.status} holatida.`,
           show_alert: true,
         });
+
         return;
       }
 
@@ -256,7 +279,6 @@ async function handleCallback(callback) {
       });
     }
 
-    // Admin tugmasi orqali holat o‘zgarganini mijozga bildirish
     await notifyCustomerStatus(type, record);
 
     await telegramRequest('answerCallbackQuery', {
@@ -286,6 +308,7 @@ async function handleCallback(callback) {
   }
 }
 
+// Telegram xabarlarini tinglash
 async function startTelegramPolling() {
   if (pollingStarted) return;
 
@@ -328,6 +351,7 @@ async function startTelegramPolling() {
         }
       } catch (error) {
         console.error('Telegram polling xatosi:', error.message);
+
         await new Promise((resolve) => setTimeout(resolve, 3000));
       }
     }

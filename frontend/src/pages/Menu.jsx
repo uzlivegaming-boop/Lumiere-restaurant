@@ -11,20 +11,19 @@ function Menu() {
 
   const {
     data: dishes = [],
-    isLoading: loading,
+    isLoading,
     isError,
+    error,
+    refetch,
   } = useQuery({
     queryKey: ['dishes'],
     queryFn: getDishes,
-    select: (data) => Array.isArray(data) ? data : [],
   });
 
   const categories = [
     'Barchasi',
     ...new Set(
-      dishes
-        .map((dish) => dish.category?.name)
-        .filter(Boolean)
+      dishes.map((dish) => dish.category?.name).filter(Boolean)
     ),
   ];
 
@@ -43,15 +42,22 @@ function Menu() {
         <p>Har bir ta’mda o‘ziga xos san’at.</p>
       </div>
 
-      {loading && <p>Taomlar yuklanmoqda...</p>}
+      {isLoading && <p>Taomlar yuklanmoqda...</p>}
 
       {isError && (
-        <p role="alert">
-          Taomlarni yuklab bo‘lmadi. Backend ishlayotganini tekshiring.
-        </p>
+        <div role="alert">
+          <p>
+            Taomlarni yuklab bo‘lmadi.
+            {' '}
+            {error?.response?.data?.message || error?.message}
+          </p>
+          <button type="button" onClick={() => refetch()}>
+            Qayta urinish
+          </button>
+        </div>
       )}
 
-      {!loading && !isError && (
+      {!isLoading && !isError && (
         <>
           <div className="category-filters">
             {categories.map((category) => (
@@ -71,12 +77,13 @@ function Menu() {
           </div>
 
           {filteredDishes.length === 0 ? (
-            <p>Hozircha bu kategoriyada taomlar yo‘q.</p>
+            <p>
+              Hozircha taomlar yo‘q. Keyinroq qayta tekshiring.
+            </p>
           ) : (
             <div className="dish-grid">
               {filteredDishes.map((dish) => {
                 const price = Number(dish.price) || 0;
-
                 const ratings = Array.isArray(dish.ratings)
                   ? dish.ratings
                   : [];
@@ -84,7 +91,8 @@ function Menu() {
                 const rating =
                   ratings.length > 0
                     ? ratings.reduce(
-                        (sum, item) => sum + Number(item.value || 0),
+                        (sum, item) =>
+                          sum + Number(item.score || item.value || 0),
                         0
                       ) / ratings.length
                     : 0;
@@ -92,7 +100,14 @@ function Menu() {
                 return (
                   <article className="dish-card" key={dish.id}>
                     {dish.image ? (
-                      <img src={dish.image} alt={dish.name} />
+                      <img
+                        src={dish.image}
+                        alt={dish.name}
+                        loading="lazy"
+                        onError={(event) => {
+                          event.currentTarget.style.display = 'none';
+                        }}
+                      />
                     ) : (
                       <div className="dish-image-placeholder">
                         LUMIERE
@@ -132,7 +147,6 @@ function Menu() {
                         disabled={dish.isAvailable === false}
                         onClick={() => {
                           addToCart({ ...dish, price });
-                          alert(`${dish.name} savatchaga qo‘shildi!`);
                         }}
                       >
                         {dish.isAvailable === false

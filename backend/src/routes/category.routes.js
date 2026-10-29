@@ -1,36 +1,41 @@
 
 const express = require('express');
+
 const router = express.Router();
-const prisma = require('../prisma');
 
-// Barcha kategoriyalarni olish
-router.get('/', async (req, res) => {
-  try {
-    const categories = await prisma.category.findMany({
-      include: {
-        _count: {
-          select: {
-            dishes: true,
-          },
-        },
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    });
+const validate = require('../middlewares/validate');
+const requireAdmin = require('../middlewares/adminAuth');
 
-    return res.status(200).json({
-      success: true,
-      data: categories,
-    });
-  } catch (error) {
-    console.error('Kategoriyalarni olish xatosi:', error);
+const {
+  createCategorySchema,
+  updateCategorySchema,
+} = require('../validations/category.validation');
 
-    return res.status(500).json({
-      success: false,
-      message: 'Kategoriyalarni olishda xatolik yuz berdi',
-    });
-  }
-});
+const {
+  getAllCategories,
+  getOneCategory,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+} = require('../controllers/category.controller');
+
+router.get('/', getAllCategories);
+router.get('/:id', getOneCategory);
+
+router.post(
+  '/',
+  requireAdmin,
+  validate(createCategorySchema),
+  createCategory
+);
+
+router.put(
+  '/:id',
+  requireAdmin,
+  validate(updateCategorySchema),
+  updateCategory
+);
+
+router.delete('/:id', requireAdmin, deleteCategory);
 
 module.exports = router;
