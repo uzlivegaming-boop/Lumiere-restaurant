@@ -1,15 +1,36 @@
 
 require('dotenv').config();
 
-const { Telegraf } = require('telegraf');
+const { Telegraf, Markup } = require('telegraf');
 const prisma = require('../prisma');
 const crypto = require('crypto');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const bot = TOKEN ? new Telegraf(TOKEN) : null;
 
+const CUSTOMER_MENU = Markup.keyboard([
+  ['🍽 Menyu', '🛒 Buyurtmalarim'],
+  ['📅 Bronlarim', '👤 Profil'],
+  ['📞 Aloqa'],
+]).resize();
+
+const ADMIN_MENU = Markup.keyboard([
+  ['📦 Buyurtmalar', '📅 Bronlar'],
+  ['📊 Statistika'],
+  ['👤 Profil', '📞 Aloqa'],
+]).resize();
+
+const isAdmin = (ctx) => {
+  return (
+    process.env.TELEGRAM_ADMIN_ID &&
+    String(ctx.from?.id) === String(process.env.TELEGRAM_ADMIN_ID)
+  );
+};
+
 async function telegramRequest(method, body = {}) {
-  if (!TOKEN) throw new Error('TELEGRAM_BOT_TOKEN sozlanmagan');
+  if (!TOKEN) {
+    throw new Error('TELEGRAM_BOT_TOKEN sozlanmagan');
+  }
 
   const response = await fetch(
     `https://api.telegram.org/bot${TOKEN}/${method}`,
@@ -99,7 +120,7 @@ function statusButtons(type, id) {
   };
 }
 
-// Mijoz akkauntini buyurtma yoki bron bilan ulash
+// Buyurtma yoki bronni Telegram bilan ulash
 async function handleStartMessage(message) {
   const text = message.text || '';
   const chatId = message.chat?.id;
@@ -108,11 +129,8 @@ async function handleStartMessage(message) {
 
   const match = text.match(/^\/start(?:@\w+)?\s+([a-f0-9]{48})$/i);
 
+  // Oddiy /start
   if (!match) {
-    await telegramRequest('sendMessage', {
-      chat_id: chatId,
-      text: 'Assalomu alaykum! Buyurtma yoki bronni ulash uchun saytdagi Telegram havolasidan foydalaning.',
-    });
     return;
   }
 
@@ -170,7 +188,7 @@ async function handleStartMessage(message) {
   }
 }
 
-// Holat o‘zgarganda mijozga xabar yuborish
+// Mijozga holat o‘zgargani haqida xabar
 async function notifyCustomerStatus(type, record) {
   if (!record?.customerTelegramChatId) return false;
 
@@ -196,7 +214,7 @@ async function notifyCustomerStatus(type, record) {
   );
 }
 
-// Admin tugmalarini boshqarish
+// Admin tasdiqlash tugmalari
 async function handleCallback(callback) {
   const adminId = process.env.TELEGRAM_ADMIN_ID;
   const targetChatId = process.env.TELEGRAM_CHAT_ID;
@@ -299,10 +317,340 @@ async function handleCallback(callback) {
   }
 }
 
-// Telegraf buyruqlari va hodisalari
+// Mijoz menyusi: taomlar
+async function showDishes(ctx) {
+  const dishes = await prisma.dish.findMany({
+    where: { isAvailable: true },
+    include: { category: true },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  });
+
+  if (!dishes.length) {
+    return ctx.reply('Hozircha menyuda taomlar mavjud emas.');
+  }
+
+  let message = '🍽 LUMIERE RESTAURANT MENYUSI\n\n';
+
+  for (const dish of dishes) {
+    message +=
+      `🍴 ${dish.name}\n` +
+      `📂 ${dish.category.name}\n` +
+      `💰 ${Number(dish.price).toLocaleString('uz-UZ')} so‘m\n\n`;
+  }
+
+  await ctx.reply(message);
+}
+
+// Mijoz buyurtmalari
+async function showMyOrders(ctx) {
+  const orders = await prisma.order.findMany({
+    where: {
+      customerTelegramChatId: String(ctx.chat.id),
+    },
+    include: {
+      items: {
+        include: { dish: true },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  });
+
+  if (!orders.length) {
+    return ctx.reply(
+      'Sizga ulangan buyurtmalar topilmadi.\n\nBuyurtmani ulash uchun saytdagi Telegram havolasidan foydalaning.'
+    );
+  }
+
+  for (const order of orders) {
+    let message =
+      `🛒 BUYURTMA\n` +
+      `Raqam: ${order.id}\n` +
+      `Holati: ${order.status}\n` +
+      `Jami: ${Number(order.total).toLocaleString('uz-UZ')} so‘m\n\n`;
+
+    for (const item of order.items) {
+      message += `${item.dish.name} × ${item.quantity}\n`;
+    }
+
+    await ctx.reply(message);
+  }
+}
+
+// Mijoz bronlari
+async function showMyBookings(ctx) {
+  const bookings = await prisma.booking.findMany({
+    where: {
+      customerTelegramChatId: String(ctx.chat.id),
+    },
+    orderBy: { date: 'desc' },
+    take: 10,
+  });
+
+  if (!bookings.length) {
+    return ctx.reply(
+      'Sizga ulangan bronlar topilmadi.\n\nBronni ulash uchun saytdagi Telegram havolasidan foydalaning.'
+    );
+  }
+
+  for (const booking of bookings) {
+    await ctx.reply(
+      `📅 STOL BRONI\n\n` +
+      `Ism: ${booking.name}\n` +
+      `Sana: ${new Date(booking.date).toLocaleDateString('uz-UZ')}\n` +
+      `Vaqt: ${booking.time}\n` +
+      `Mehmonlar: ${booking.guests}\n` +
+      `Holati: ${booking.status}`
+    );
+  }
+}
+
+// Mijoz profili
+async function showProfile(ctx) {
+  const chatId = String(ctx.chat.id);
+
+  const [order, booking] = await Promise.all([
+    prisma.order.findFirst({
+      where: { customerTelegramChatId: chatId },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.booking.findFirst({
+      where: { customerTelegramChatId: chatId },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ]);
+
+  const name = order?.customerName || booking?.name || 'Ma’lumot yo‘q';
+  const phone = order?.phone || booking?.phone || 'Ma’lumot yo‘q';
+
+  await ctx.reply(
+    `👤 PROFIL\n\n` +
+    `Ism: ${name}\n` +
+    `Telefon: ${phone}\n` +
+    `Telegram ID: ${chatId}\n\n` +
+    `Profil ma’lumotlari buyurtma yoki bron ulanishidan olinadi.`
+  );
+}
+
+// Admin: buyurtmalar
+async function showAdminOrders(ctx) {
+  if (!isAdmin(ctx)) {
+    return ctx.reply('⛔ Bu bo‘lim faqat admin uchun.');
+  }
+
+  const orders = await prisma.order.findMany({
+    include: {
+      items: { include: { dish: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  });
+
+  if (!orders.length) {
+    return ctx.reply('Hozircha buyurtmalar yo‘q.', ADMIN_MENU);
+  }
+
+  for (const order of orders) {
+    let message =
+      `📦 BUYURTMA\n` +
+      `ID: ${order.id}\n` +
+      `Mijoz: ${order.customerName}\n` +
+      `Telefon: ${order.phone}\n` +
+      `Manzil: ${order.address || 'Ko‘rsatilmagan'}\n` +
+      `Holat: ${order.status}\n` +
+      `Jami: ${Number(order.total).toLocaleString('uz-UZ')} so‘m\n\n`;
+
+    for (const item of order.items) {
+      message += `${item.dish.name} × ${item.quantity}\n`;
+    }
+
+    await ctx.reply(
+      message,
+      order.status === 'PENDING'
+        ? Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                '✅ Tasdiqlash',
+                `order:CONFIRMED:${order.id}`
+              ),
+              Markup.button.callback(
+                '❌ Bekor qilish',
+                `order:CANCELLED:${order.id}`
+              ),
+            ],
+          ])
+        : undefined
+    );
+  }
+}
+
+// Admin: bronlar
+async function showAdminBookings(ctx) {
+  if (!isAdmin(ctx)) {
+    return ctx.reply('⛔ Bu bo‘lim faqat admin uchun.');
+  }
+
+  const bookings = await prisma.booking.findMany({
+    orderBy: { date: 'desc' },
+    take: 10,
+  });
+
+  if (!bookings.length) {
+    return ctx.reply('Hozircha bronlar yo‘q.', ADMIN_MENU);
+  }
+
+  for (const booking of bookings) {
+    await ctx.reply(
+      `📅 BRON\n\n` +
+      `ID: ${booking.id}\n` +
+      `Ism: ${booking.name}\n` +
+      `Telefon: ${booking.phone}\n` +
+      `Sana: ${new Date(booking.date).toLocaleDateString('uz-UZ')}\n` +
+      `Vaqt: ${booking.time}\n` +
+      `Mehmonlar: ${booking.guests}\n` +
+      `Holat: ${booking.status}`,
+      booking.status === 'PENDING'
+        ? Markup.inlineKeyboard([
+            [
+              Markup.button.callback(
+                '✅ Tasdiqlash',
+                `booking:CONFIRMED:${booking.id}`
+              ),
+              Markup.button.callback(
+                '❌ Bekor qilish',
+                `booking:CANCELLED:${booking.id}`
+              ),
+            ],
+          ])
+        : undefined
+    );
+  }
+}
+
+// Admin: statistika
+async function showStatistics(ctx) {
+  if (!isAdmin(ctx)) {
+    return ctx.reply('⛔ Bu bo‘lim faqat admin uchun.');
+  }
+
+  const [ordersCount, bookingsCount, pendingOrders, completedOrders, revenue] =
+    await Promise.all([
+      prisma.order.count(),
+      prisma.booking.count(),
+      prisma.order.count({ where: { status: 'PENDING' } }),
+      prisma.order.count({ where: { status: 'COMPLETED' } }),
+      prisma.order.aggregate({
+        where: { status: 'COMPLETED' },
+        _sum: { total: true },
+      }),
+    ]);
+
+  await ctx.reply(
+    `📊 LUMIERE STATISTIKASI\n\n` +
+    `📦 Jami buyurtmalar: ${ordersCount}\n` +
+    `⏳ Kutilayotgan buyurtmalar: ${pendingOrders}\n` +
+    `✅ Yakunlangan buyurtmalar: ${completedOrders}\n` +
+    `📅 Jami bronlar: ${bookingsCount}\n` +
+    `💰 Yakunlangan buyurtmalar tushumi: ${Number(
+      revenue._sum.total || 0
+    ).toLocaleString('uz-UZ')} so‘m`,
+    ADMIN_MENU
+  );
+}
+
+// Telegram menyulari
 if (bot) {
   bot.start(async (ctx) => {
-    await handleStartMessage(ctx.message);
+    const text = ctx.message.text || '';
+    const hasToken = /^\/start(?:@\w+)?\s+[a-f0-9]{48}$/i.test(text);
+
+    if (hasToken) {
+      await handleStartMessage(ctx.message);
+    }
+
+    if (isAdmin(ctx)) {
+      await ctx.reply(
+        'Assalomu alaykum, admin! 👋\nLumiere Admin Panelga xush kelibsiz.',
+        ADMIN_MENU
+      );
+    } else {
+      await ctx.reply(
+        'Assalomu alaykum! 👋\nLumiere Restaurant botiga xush kelibsiz.',
+        CUSTOMER_MENU
+      );
+    }
+  });
+
+  bot.hears('🍽 Menyu', async (ctx) => {
+    try {
+      await showDishes(ctx);
+    } catch (error) {
+      console.error('Menyu xatosi:', error.message);
+      await ctx.reply('Menyuni yuklashda xatolik yuz berdi.');
+    }
+  });
+
+  bot.hears('🛒 Buyurtmalarim', async (ctx) => {
+    try {
+      await showMyOrders(ctx);
+    } catch (error) {
+      console.error('Buyurtmalar xatosi:', error.message);
+      await ctx.reply('Buyurtmalarni yuklashda xatolik yuz berdi.');
+    }
+  });
+
+  bot.hears('📅 Bronlarim', async (ctx) => {
+    try {
+      await showMyBookings(ctx);
+    } catch (error) {
+      console.error('Bronlar xatosi:', error.message);
+      await ctx.reply('Bronlarni yuklashda xatolik yuz berdi.');
+    }
+  });
+
+  bot.hears('👤 Profil', async (ctx) => {
+    try {
+      await showProfile(ctx);
+    } catch (error) {
+      console.error('Profil xatosi:', error.message);
+      await ctx.reply('Profilni yuklashda xatolik yuz berdi.');
+    }
+  });
+
+  bot.hears('📞 Aloqa', async (ctx) => {
+    await ctx.reply(
+      '📞 LUMIERE RESTAURANT\n\n' +
+      'Telefon: +998 93 985 40 43\n\n' +
+      'Biz bilan bog‘lanishingiz mumkin.'
+    );
+  });
+
+  bot.hears('📦 Buyurtmalar', async (ctx) => {
+    try {
+      await showAdminOrders(ctx);
+    } catch (error) {
+      console.error('Admin buyurtmalar xatosi:', error.message);
+      await ctx.reply('Buyurtmalarni yuklashda xatolik yuz berdi.');
+    }
+  });
+
+  bot.hears('📅 Bronlar', async (ctx) => {
+    try {
+      await showAdminBookings(ctx);
+    } catch (error) {
+      console.error('Admin bronlar xatosi:', error.message);
+      await ctx.reply('Bronlarni yuklashda xatolik yuz berdi.');
+    }
+  });
+
+  bot.hears('📊 Statistika', async (ctx) => {
+    try {
+      await showStatistics(ctx);
+    } catch (error) {
+      console.error('Statistika xatosi:', error.message);
+      await ctx.reply('Statistikani hisoblashda xatolik yuz berdi.');
+    }
   });
 
   bot.on('callback_query', async (ctx) => {
