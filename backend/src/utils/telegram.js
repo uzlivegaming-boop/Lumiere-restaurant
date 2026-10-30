@@ -1,21 +1,25 @@
 
 require('dotenv').config();
 
+const { Telegraf } = require('telegraf');
 const prisma = require('../prisma');
 const crypto = require('crypto');
 
-const API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
-
-let pollingStarted = false;
-let updateOffset = 0;
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const bot = TOKEN ? new Telegraf(TOKEN) : null;
 
 async function telegramRequest(method, body = {}) {
-  const response = await fetch(`${API}/${method}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30000),
-  });
+  if (!TOKEN) throw new Error('TELEGRAM_BOT_TOKEN sozlanmagan');
+
+  const response = await fetch(
+    `https://api.telegram.org/bot${TOKEN}/${method}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30000),
+    }
+  );
 
   const result = await response.json();
 
@@ -26,12 +30,12 @@ async function telegramRequest(method, body = {}) {
   return result.result;
 }
 
-// Adminning Telegram chatiga xabar yuborish
+// Admin chatiga xabar yuborish
 async function sendTelegramMessage(message, replyMarkup) {
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
-  if (!process.env.TELEGRAM_BOT_TOKEN || !chatId) {
-    console.error('Telegram sozlamalari backend/.env faylida yo‘q');
+  if (!TOKEN || !chatId) {
+    console.error('Telegram sozlamalari topilmadi');
     return false;
   }
 
@@ -42,7 +46,6 @@ async function sendTelegramMessage(message, replyMarkup) {
       ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     });
 
-    console.log('Telegram xabari yuborildi');
     return true;
   } catch (error) {
     console.error('Telegram xatosi:', error.message);
@@ -50,7 +53,7 @@ async function sendTelegramMessage(message, replyMarkup) {
   }
 }
 
-// Telegram chat ID ma'lum bo‘lgan mijozga xabar yuborish
+// Mijozga xabar yuborish
 async function sendCustomerTelegramMessage(chatId, message) {
   if (!chatId) return false;
 
@@ -96,7 +99,7 @@ function statusButtons(type, id) {
   };
 }
 
-// Mijozning Telegram akkauntini buyurtma yoki bron bilan ulash
+// Mijoz akkauntini buyurtma yoki bron bilan ulash
 async function handleStartMessage(message) {
   const text = message.text || '';
   const chatId = message.chat?.id;
@@ -106,13 +109,10 @@ async function handleStartMessage(message) {
   const match = text.match(/^\/start(?:@\w+)?\s+([a-f0-9]{48})$/i);
 
   if (!match) {
-    if (/^\/start(?:@\w+)?$/.test(text)) {
-      await telegramRequest('sendMessage', {
-        chat_id: chatId,
-        text: 'Assalomu alaykum! Buyurtma yoki bronni ulash uchun saytdagi Telegram havolasidan foydalaning.',
-      });
-    }
-
+    await telegramRequest('sendMessage', {
+      chat_id: chatId,
+      text: 'Assalomu alaykum! Buyurtma yoki bronni ulash uchun saytdagi Telegram havolasidan foydalaning.',
+    });
     return;
   }
 
@@ -170,7 +170,7 @@ async function handleStartMessage(message) {
   }
 }
 
-// Buyurtma yoki bron holati o‘zgarganda mijozga xabar yuborish
+// Holat o‘zgarganda mijozga xabar yuborish
 async function notifyCustomerStatus(type, record) {
   if (!record?.customerTelegramChatId) return false;
 
@@ -196,7 +196,7 @@ async function notifyCustomerStatus(type, record) {
   );
 }
 
-// Adminning Telegram tugmalarini boshqarish
+// Admin tugmalarini boshqarish
 async function handleCallback(callback) {
   const adminId = process.env.TELEGRAM_ADMIN_ID;
   const targetChatId = process.env.TELEGRAM_CHAT_ID;
@@ -211,12 +211,10 @@ async function handleCallback(callback) {
       text: 'Bu tugmalardan foydalanishga ruxsatingiz yo‘q.',
       show_alert: true,
     });
-
     return;
   }
 
-  const data = callback.data || '';
-  const match = data.match(
+  const match = (callback.data || '').match(
     /^(order|booking):(CONFIRMED|CANCELLED):([a-zA-Z0-9_-]+)$/
   );
 
@@ -226,7 +224,6 @@ async function handleCallback(callback) {
       text: 'Noto‘g‘ri buyruq.',
       show_alert: true,
     });
-
     return;
   }
 
@@ -236,9 +233,7 @@ async function handleCallback(callback) {
     let record;
 
     if (type === 'order') {
-      const existing = await prisma.order.findUnique({
-        where: { id },
-      });
+      const existing = await prisma.order.findUnique({ where: { id } });
 
       if (!existing) throw new Error('Buyurtma topilmadi');
 
@@ -248,7 +243,6 @@ async function handleCallback(callback) {
           text: `Bu buyurtma allaqachon ${existing.status} holatida.`,
           show_alert: true,
         });
-
         return;
       }
 
@@ -257,9 +251,7 @@ async function handleCallback(callback) {
         data: { status },
       });
     } else {
-      const existing = await prisma.booking.findUnique({
-        where: { id },
-      });
+      const existing = await prisma.booking.findUnique({ where: { id } });
 
       if (!existing) throw new Error('Bron topilmadi');
 
@@ -269,7 +261,6 @@ async function handleCallback(callback) {
           text: `Bu bron allaqachon ${existing.status} holatida.`,
           show_alert: true,
         });
-
         return;
       }
 
@@ -308,78 +299,63 @@ async function handleCallback(callback) {
   }
 }
 
-// Telegram xabarlarini tinglash
+// Telegraf buyruqlari va hodisalari
+if (bot) {
+  bot.start(async (ctx) => {
+    await handleStartMessage(ctx.message);
+  });
 
-async function startTelegramPolling() {
-  if (pollingStarted) return;
+  bot.on('callback_query', async (ctx) => {
+    await handleCallback(ctx.callbackQuery);
+  });
 
-  if (!process.env.TELEGRAM_BOT_TOKEN) {
-    console.log('Telegram tokeni yo‘q, polling ishga tushmadi');
+  bot.catch((error) => {
+    console.error('Telegraf xatosi:', error.message);
+  });
+}
+
+// Webhook manzilini Telegramga ro‘yxatdan o‘tkazish
+async function setTelegramWebhook() {
+  if (!bot) {
+    console.log('Telegram tokeni yo‘q, bot ishga tushmadi');
     return;
   }
 
-  pollingStarted = true;
+  const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL;
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
 
-  try {
-    await telegramRequest('deleteWebhook', {
-      drop_pending_updates: false,
-    });
-
-    console.log('Telegram xabarlari va tugmalari tinglanmoqda');
-
-    while (true) {
-      try {
-        const updates = await telegramRequest('getUpdates', {
-          offset: updateOffset,
-          timeout: 25,
-          allowed_updates: ['callback_query', 'message'],
-        });
-
-        for (const update of updates) {
-          updateOffset = update.update_id + 1;
-
-          try {
-            if (update.callback_query) {
-              await handleCallback(update.callback_query);
-            }
-
-            if (update.message?.text?.startsWith('/start')) {
-              await handleStartMessage(update.message);
-            }
-          } catch (error) {
-            console.error(
-              'Telegram update xatosi:',
-              error.message
-            );
-          }
-        }
-      } catch (error) {
-        console.error(
-          'Telegram polling xatosi:',
-          error.message,
-          error.cause?.message || ''
-        );
-
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-      }
-    }
-  } catch (error) {
-    pollingStarted = false;
-
-    console.error('Telegram polling ishga tushmadi:', {
-      message: error.message,
-      cause: error.cause?.message,
-      code: error.cause?.code,
-    });
+  if (!webhookUrl || !secret) {
+    throw new Error(
+      'TELEGRAM_WEBHOOK_URL yoki TELEGRAM_WEBHOOK_SECRET sozlanmagan'
+    );
   }
+
+  await bot.telegram.setWebhook(webhookUrl, {
+    secret_token: secret,
+    allowed_updates: ['message', 'callback_query'],
+  });
+
+  console.log('Telegram Webhook ro‘yxatdan o‘tkazildi');
+}
+
+function getTelegramWebhookMiddleware() {
+  if (!bot) {
+    throw new Error('Telegram bot tokeni sozlanmagan');
+  }
+
+  return bot.webhookCallback('/telegram/webhook', {
+    secretToken: process.env.TELEGRAM_WEBHOOK_SECRET,
+  });
 }
 
 module.exports = {
+  bot,
   sendTelegramMessage,
   sendCustomerTelegramMessage,
   notifyCustomerStatus,
   createTelegramLinkToken,
   getTelegramLink,
   statusButtons,
-  startTelegramPolling,
+  setTelegramWebhook,
+  getTelegramWebhookMiddleware,
 };

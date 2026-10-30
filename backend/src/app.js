@@ -15,6 +15,11 @@ const categoryRoutes = require('./routes/category.routes');
 const orderRoutes = require('./routes/order.routes');
 const bookingRoutes = require('./routes/booking.routes');
 const contactRoutes = require('./routes/contact.routes');
+
+const {
+  getTelegramWebhookMiddleware,
+} = require('./utils/telegram');
+
 const {
   errorHandler,
   notFound,
@@ -41,11 +46,9 @@ app.use(
         return callback(null, true);
       }
 
-      // Vercel domenlarini tekshirish
+      // Vercel domenlari
       if (
-        /^https:\/\/[a-z0-9-]+(?:-[a-z0-9-]+)*\.vercel\.app$/i.test(
-          origin
-        )
+        /^https:\/\/[a-z0-9-]+(?:-[a-z0-9-]+)*\.vercel\.app$/i.test(origin)
       ) {
         return callback(null, true);
       }
@@ -62,6 +65,13 @@ app.use(
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+
+// Telegram Webhook
+app.post(
+  '/telegram/webhook',
+  getTelegramWebhookMiddleware()
+);
+
 // Admin sessiyasi uchun maxfiy kalit
 if (!process.env.ADMIN_SESSION_SECRET) {
   throw new Error(
@@ -86,7 +96,6 @@ app.use(
 );
 
 // Server va ma'lumotlar bazasini tekshirish
-
 app.get('/health', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -107,7 +116,6 @@ app.get('/health', async (req, res) => {
     });
   }
 });
-
 
 // Clerk autentifikatsiyasi
 app.use(clerkMiddleware());
