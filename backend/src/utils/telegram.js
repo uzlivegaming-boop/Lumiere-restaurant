@@ -103,21 +103,38 @@ function getTelegramLink(token) {
   return `https://t.me/${username.replace(/^@/, '')}?start=${token}`;
 }
 
-function statusButtons(type, id) {
-  return {
-    inline_keyboard: [
-      [
-        {
-          text: '✅ Tasdiqlash',
-          callback_data: `${type}:CONFIRMED:${id}`,
-        },
-        {
-          text: '❌ Bekor qilish',
-          callback_data: `${type}:CANCELLED:${id}`,
-        },
-      ],
-    ],
-  };
+function statusButtons(type, id, status = 'PENDING') {
+  const buttons = [];
+
+  if (status === 'PENDING') {
+    buttons.push([
+      Markup.button.callback('✅ Tasdiqlash', `${type}:CONFIRMED:${id}`),
+      Markup.button.callback('❌ Bekor qilish', `${type}:CANCELLED:${id}`),
+    ]);
+  }
+
+  if (status === 'CONFIRMED') {
+    buttons.push([
+      Markup.button.callback('🍳 Tayyorlanmoqda', `${type}:PREPARING:${id}`),
+      Markup.button.callback('❌ Bekor qilish', `${type}:CANCELLED:${id}`),
+    ]);
+  }
+
+  if (status === 'PREPARING') {
+    buttons.push([
+      Markup.button.callback('🍽 Tayyor', `${type}:READY:${id}`),
+      Markup.button.callback('❌ Bekor qilish', `${type}:CANCELLED:${id}`),
+    ]);
+  }
+
+  if (status === 'READY') {
+    buttons.push([
+      Markup.button.callback('🏁 Yakunlandi', `${type}:COMPLETED:${id}`),
+      Markup.button.callback('❌ Bekor qilish', `${type}:CANCELLED:${id}`),
+    ]);
+  }
+
+  return Markup.inlineKeyboard(buttons);
 }
 
 // Buyurtma yoki bronni Telegram bilan ulash
@@ -233,7 +250,7 @@ async function handleCallback(callback) {
   }
 
   const match = (callback.data || '').match(
-    /^(order|booking):(CONFIRMED|CANCELLED):([a-zA-Z0-9_-]+)$/
+    /^(order|booking):(CONFIRMED|PREPARING|READY|COMPLETED|CANCELLED):([a-zA-Z0-9_-]+)$/
   );
 
   if (!match) {
@@ -247,64 +264,68 @@ async function handleCallback(callback) {
 
   const [, type, status, id] = match;
 
+  const allowedTransitions = {
+    PENDING: ['CONFIRMED', 'CANCELLED'],
+    CONFIRMED: ['PREPARING', 'CANCELLED'],
+    PREPARING: ['READY', 'CANCELLED'],
+    READY: ['COMPLETED', 'CANCELLED'],
+    COMPLETED: [],
+    CANCELLED: [],
+  };
+
   try {
-    let record;
+    const model = type === 'order' ? prisma.order : prisma.booking;
 
-    if (type === 'order') {
-      const existing = await prisma.order.findUnique({ where: { id } });
+    const existing = await model.findUnique({
+      where: { id },
+    });
 
-      if (!existing) throw new Error('Buyurtma topilmadi');
-
-      if (existing.status !== 'PENDING') {
-        await telegramRequest('answerCallbackQuery', {
-          callback_query_id: callback.id,
-          text: `Bu buyurtma allaqachon ${existing.status} holatida.`,
-          show_alert: true,
-        });
-        return;
-      }
-
-      record = await prisma.order.update({
-        where: { id },
-        data: { status },
-      });
-    } else {
-      const existing = await prisma.booking.findUnique({ where: { id } });
-
-      if (!existing) throw new Error('Bron topilmadi');
-
-      if (existing.status !== 'PENDING') {
-        await telegramRequest('answerCallbackQuery', {
-          callback_query_id: callback.id,
-          text: `Bu bron allaqachon ${existing.status} holatida.`,
-          show_alert: true,
-        });
-        return;
-      }
-
-      record = await prisma.booking.update({
-        where: { id },
-        data: { status },
-      });
+    if (!existing) {
+      throw new Error('Buyurtma yoki bron topilmadi');
     }
 
-    await notifyCustomerStatus(type, record);
+    if (!allowedTransitions[existing.status]?.includes(status)) {
+      await telegramRequest('answerCallbackQuery', {
+        callback_query_id: callback.id,
+        text: 'Bu holatga o‘tish mumkin emas.',
+        show_alert: true,
+      });
+      return;
+    }
+
+    const record = await model.update({
+      where: { id },
+      data: { status },
+    });
+
+    const notificationSent = await notifyCustomerStatus(type, record);
 
     await telegramRequest('answerCallbackQuery', {
       callback_query_id: callback.id,
-      text: status === 'CONFIRMED' ? 'Tasdiqlandi!' : 'Bekor qilindi!',
+      text: notificationSent
+        ? 'Holat yangilandi. Mijozga xabar yuborildi.'
+        : 'Holat yangilandi, lekin mijozga xabar yuborilmadi.',
     });
 
+    const statusLabels = {
+      CONFIRMED: '✅ TASDIQLANDI',
+      PREPARING: '🍳 TAYYORLANMOQDA',
+      READY: '🍽 TAYYOR',
+      COMPLETED: '🏁 YAKUNLANDI',
+      CANCELLED: '❌ BEKOR QILINDI',
+    };
+
     const oldText = callback.message?.text || '';
-    const newText = `${oldText}\n\n📌 Yangi holat: ${
-      status === 'CONFIRMED' ? '✅ TASDIQLANDI' : '❌ BEKOR QILINDI'
-    }`;
+    const cleanText = oldText.split('\n\n📌 Yangi holat:')[0];
 
     await telegramRequest('editMessageText', {
       chat_id: callback.message.chat.id,
       message_id: callback.message.message_id,
-      text: newText,
-      reply_markup: { inline_keyboard: [] },
+      text: `${cleanText}\n\n📌 Yangi holat: ${statusLabels[status]}`,
+      reply_markup:
+        status === 'COMPLETED' || status === 'CANCELLED'
+          ? { inline_keyboard: [] }
+          : statusButtons(type, id, status).reply_markup,
     });
   } catch (error) {
     console.error('Telegram tugmasi xatosi:', error.message);
@@ -467,20 +488,7 @@ async function showAdminOrders(ctx) {
 
     await ctx.reply(
       message,
-      order.status === 'PENDING'
-        ? Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                '✅ Tasdiqlash',
-                `order:CONFIRMED:${order.id}`
-              ),
-              Markup.button.callback(
-                '❌ Bekor qilish',
-                `order:CANCELLED:${order.id}`
-              ),
-            ],
-          ])
-        : undefined
+      statusButtons('order', order.id, order.status)
     );
   }
 }
@@ -512,17 +520,17 @@ async function showAdminBookings(ctx) {
       `Holat: ${booking.status}`,
       booking.status === 'PENDING'
         ? Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                '✅ Tasdiqlash',
-                `booking:CONFIRMED:${booking.id}`
-              ),
-              Markup.button.callback(
-                '❌ Bekor qilish',
-                `booking:CANCELLED:${booking.id}`
-              ),
-            ],
-          ])
+          [
+            Markup.button.callback(
+              '✅ Tasdiqlash',
+              `booking:CONFIRMED:${booking.id}`
+            ),
+            Markup.button.callback(
+              '❌ Bekor qilish',
+              `booking:CANCELLED:${booking.id}`
+            ),
+          ],
+        ])
         : undefined
     );
   }
